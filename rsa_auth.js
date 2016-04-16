@@ -11,8 +11,7 @@ function signUp(password, callback){
         iv: '',
         salt: '',
         pseudonym: '',
-        password_hash: '',
-        aes_key: ''
+        password_hash: ''
     }
         
     // Create RSA Key Pair
@@ -30,14 +29,13 @@ function signUp(password, callback){
                 // Get AES Key derived from password
                 getPasswordDerivationKey(password, 1000, null, function(aes_key, salt){
                     
-                    signUpData.aes_key = aes_key;
-                    signUpData.salt = salt;
+                    signUpData.salt = ab2str(salt.buffer);
                     
                     // Compute ciphered Private Key
                     encryptAES(aes_key, priv_key, "AES-CBC", function(cipher_priv, gen_iv){
                         
-                        signUpData.priv_key = ab2str(cipher_priv.buffer);
-                        signUpData.iv = ab2str(gen_iv.buffer);
+                        signUpData.priv_key = ab2str(cipher_priv.buffer).hexEncode();
+                        signUpData.iv = ab2str(gen_iv.buffer).hexEncode();
                         
                         // Compute Pseudonym from Private Key
                         computeSHA(priv_key, "SHA-256", function(hash){
@@ -70,7 +68,7 @@ function logInRequest(password, salt, callback){
         logInRequestData.password_hash = ab2str(hash);
         
         // Get AES Key derived from password
-        getPasswordDerivationKey(password, 1000, salt, function(aes_key, salt){
+        getPasswordDerivationKey(password, 1000, new Uint8Array(str2ab(salt)), function(aes_key, salt){
             
             logInRequestData.aes_key = aes_key;
             // Send the results back
@@ -92,8 +90,8 @@ function logInResponse(public_key, private_key, iv, pseudonym, aes_key, callback
     importRSA(JSON.parse(public_key), function(public_key){
         
         logInResponseData.pub_key = public_key;
-        var gen_iv = new Uint8Array(str2ab(iv));
-        var priv_key = new Uint8Array(str2ab(private_key));
+        var gen_iv = new Uint8Array(str2ab(iv.hexDecode()));
+        var priv_key = new Uint8Array(str2ab(private_key.hexDecode()));
 
         // Compute Private Key
         decryptAES(aes_key, priv_key, "AES-CBC", gen_iv, function(dec_key){
@@ -279,6 +277,7 @@ function decryptAES(key, data, algorithm, iv, callback){
         callback(new Uint8Array(decrypted).buffer);
     })
     .catch(function(err){
+        console.log(key);
         console.log(err.name);
         console.error(err);
         
@@ -315,4 +314,28 @@ function str2ab(text) {
 function ab2str(buf){
     
   return String.fromCharCode.apply(null, new Uint16Array(buf));
+}
+
+
+String.prototype.hexEncode = function(){
+    var hex, i;
+
+    var result = "";
+    for (i=0; i<this.length; i++) {
+        hex = this.charCodeAt(i).toString(16);
+        result += ("000"+hex).slice(-4);
+    }
+
+    return result
+}
+
+String.prototype.hexDecode = function(){
+    var j;
+    var hexes = this.match(/.{1,4}/g) || [];
+    var back = "";
+    for(j = 0; j<hexes.length; j++) {
+        back += String.fromCharCode(parseInt(hexes[j], 16));
+    }
+
+    return back;
 }
